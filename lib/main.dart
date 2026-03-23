@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -12,154 +11,95 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-// ---------- Telegram Bot Configuration ----------
-// Replace with your bot token (create via @BotFather on Telegram)
 const String BOT_TOKEN = "YOUR_BOT_TOKEN_HERE";
 const String TELEGRAM_API_BASE = "https://api.telegram.org/bot$BOT_TOKEN";
 
-// ---------- Foreground Service Configuration ----------
-const int POLL_INTERVAL_SECONDS = 10;
-
-// ---------- Main App ----------
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Request necessary permissions
   await _requestPermissions();
 
-  // Initialize foreground service
-  await FlutterForegroundTask.init(
+  // ERROR FIXED: init() void return karta hai, await nahi chahiye
+  FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'child_monitor_channel',
       channelName: 'Child Monitor Service',
-      channelDescription: 'This service keeps the app connected to Telegram.',
+      channelDescription: 'Keeps app connected to Telegram.',
       channelImportance: NotificationChannelImportance.LOW,
       priority: NotificationPriority.LOW,
-      iconData: null, // optional
     ),
-    iosNotificationOptions: IOSNotificationOptions(),
-    foregroundTaskOptions: ForegroundTaskOptions(
-      interval: POLL_INTERVAL_SECONDS * 1000,
-      autoStartOnBoot: true, // restart on boot
-      allowWakelock: true,
-      allowBackgroundAudio: false,
+    iosNotificationOptions: const IOSNotificationOptions(),
+    foregroundTaskOptions: const ForegroundTaskOptions(
+      interval: 10000,
+      autoRunOnBoot: true, // ERROR FIXED: autoStartOnBoot ki jagah autoRunOnBoot
+      allowWakeLock: true,
+      allowWifiLock: true,
     ),
   );
-
-  // Start the foreground service if not already running
-  if (!await FlutterForegroundTask.isRunningService) {
-    await FlutterForegroundTask.startService(
-      notificationTitle: 'Child Monitor',
-      notificationText: 'Waiting for commands...',
-      callback: _startCallback,
-    );
-  }
 
   runApp(MyApp());
 }
 
 Future<void> _requestPermissions() async {
-  // Android 13+ notification permission
-  if (await Permission.notification.isDenied) {
-    await Permission.notification.request();
-  }
-  // Storage permission (for older Android versions)
-  if (await Permission.storage.isDenied) {
-    await Permission.storage.request();
-  }
-  // For Android 11+, manage external storage might be needed for downloads
-  if (await Permission.manageExternalStorage.isDenied) {
-    await Permission.manageExternalStorage.request();
-  }
-  // Ensure the app can run in the background with wakelock
-  await WakelockPlus.enable(); // enable by default, but will be managed by video player
+  if (await Permission.notification.isDenied) await Permission.notification.request();
+  if (await Permission.storage.isDenied) await Permission.storage.request();
+  if (await Permission.manageExternalStorage.isDenied) await Permission.manageExternalStorage.request();
+  await WakelockPlus.enable();
 }
 
-// ---------- Foreground Service Callback ----------
 @pragma('vm:entry-point')
 void _startCallback() {
-  FlutterForegroundTask.setTaskHandler(TaskHandler());
+  FlutterForegroundTask.setTaskHandler(MyTaskHandler()); // ERROR FIXED: Name changed
 }
 
-class TaskHandler extends TaskHandler {
-  SendPort? _sendPort;
-
+// ERROR FIXED: Class name MyTaskHandler kar diya
+class MyTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
-    _sendPort = sendPort;
     print('Foreground service started');
   }
 
   @override
   Future<void> onEvent(DateTime timestamp, SendPort? sendPort) async {
-    _sendPort = sendPort;
-    // This runs every POLL_INTERVAL_SECONDS
     await _checkTelegramBot(sendPort);
   }
 
   @override
-  Future<void> onDestroy(DateTime timestamp, SendPort? sendPort) async {
-    print('Foreground service destroyed');
-  }
-
+  Future<void> onDestroy(DateTime timestamp, SendPort? sendPort) async {}
   @override
   void onNotificationButtonPressed(String id) {}
-
   @override
   void onNotificationPressed() {}
 }
 
-// ---------- Telegram Bot Polling ----------
 Future<void> _checkTelegramBot(SendPort? sendPort) async {
   try {
-    // Get last processed update ID from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     int? lastUpdateId = prefs.getInt('last_update_id');
 
-    // Fetch updates from Telegram
     String url = '$TELEGRAM_API_BASE/getUpdates';
-    if (lastUpdateId != null) {
-      url += '?offset=${lastUpdateId + 1}';
-    }
+    if (lastUpdateId != null) url += '?offset=${lastUpdateId + 1}';
 
     final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
       Map<String, dynamic> data = jsonDecode(response.body);
       if (data['ok']) {
         List<dynamic> updates = data['result'];
-        if (updates.isNotEmpty) {
-          // Process each update
-          for (var update in updates) {
-            int updateId = update['update_id'];
-            // Save last processed ID
-            await prefs.setInt('last_update_id', updateId);
+        for (var update in updates) {
+          int updateId = update['update_id'];
+          await prefs.setInt('last_update_id', updateId);
 
-            // Check for command or video
-            if (update.containsKey('message')) {
-              var message = update['message'];
-              // Text command: /url_video <URL>
-              if (message.containsKey('text')) {
-                String text = message['text'];
-                if (text.startsWith('/url_video')) {
-                  // Extract URL after command
-                  String urlVideo = text.replaceFirst('/url_video', '').trim();
-                  if (urlVideo.isNotEmpty) {
-                    // Send to UI to play
-                    _sendVideoToUI(sendPort, urlVideo, isUrl: true);
-                  }
-                }
+          if (update.containsKey('message')) {
+            var message = update['message'];
+            if (message.containsKey('text')) {
+              String text = message['text'];
+              if (text.startsWith('/url_video')) {
+                String urlVideo = text.replaceFirst('/url_video', '').trim();
+                if (urlVideo.isNotEmpty) _sendVideoToUI(urlVideo, isUrl: true);
               }
-              // Video file upload
-              else if (message.containsKey('video')) {
-                // Video file sent directly
-                var video = message['video'];
-                String fileId = video['file_id'];
-                // Download video file
-                String filePath = await _downloadTelegramVideo(fileId);
-                if (filePath != null) {
-                  _sendVideoToUI(sendPort, filePath, isUrl: false);
-                }
-              }
+            } else if (message.containsKey('video')) {
+              String fileId = message['video']['file_id'];
+              String? filePath = await _downloadTelegramVideo(fileId); // ERROR FIXED: String? lagaya
+              if (filePath != null) _sendVideoToUI(filePath, isUrl: false);
             }
           }
         }
@@ -172,19 +112,13 @@ Future<void> _checkTelegramBot(SendPort? sendPort) async {
 
 Future<String?> _downloadTelegramVideo(String fileId) async {
   try {
-    // Get file path from Telegram
-    final fileInfoUrl = '$TELEGRAM_API_BASE/getFile?file_id=$fileId';
-    final fileInfoRes = await http.get(Uri.parse(fileInfoUrl));
+    final fileInfoRes = await http.get(Uri.parse('$TELEGRAM_API_BASE/getFile?file_id=$fileId'));
     if (fileInfoRes.statusCode == 200) {
       Map<String, dynamic> fileInfo = jsonDecode(fileInfoRes.body);
       if (fileInfo['ok']) {
         String filePath = fileInfo['result']['file_path'];
-        String downloadUrl = 'https://api.telegram.org/file/bot$BOT_TOKEN/$filePath';
-
-        // Download file
-        final response = await http.get(Uri.parse(downloadUrl));
+        final response = await http.get(Uri.parse('https://api.telegram.org/file/bot$BOT_TOKEN/$filePath'));
         if (response.statusCode == 200) {
-          // Save to app's temporary directory
           final dir = await getTemporaryDirectory();
           final file = File('${dir.path}/video_${DateTime.now().millisecondsSinceEpoch}.mp4');
           await file.writeAsBytes(response.bodyBytes);
@@ -192,23 +126,19 @@ Future<String?> _downloadTelegramVideo(String fileId) async {
         }
       }
     }
-  } catch (e) {
-    print('Error downloading video: $e');
-  }
+  } catch (e) { print('Download error: $e'); }
   return null;
 }
 
-void _sendVideoToUI(SendPort? sendPort, String videoPathOrUrl, {bool isUrl = false}) {
-  if (sendPort != null) {
-    sendPort.send({
-      'type': 'play_video',
-      'video': videoPathOrUrl,
-      'isUrl': isUrl,
-    });
-  }
+void _sendVideoToUI(String videoPathOrUrl, {bool isUrl = false}) {
+  // ERROR FIXED: Naya tarika data UI me bhejne ka
+  FlutterForegroundTask.sendDataToMain({
+    'type': 'play_video',
+    'video': videoPathOrUrl,
+    'isUrl': isUrl,
+  });
 }
 
-// ---------- UI: Main App ----------
 class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
@@ -220,37 +150,30 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _initReceivePort();
-    // Listen for foreground service events
-    FlutterForegroundTask.addTaskDataCallback(_onTaskDataReceived);
+    _initForegroundTask();
   }
 
-  void _initReceivePort() {
-    _receivePort = ReceivePort();
-    _receivePort!.listen((data) {
-      _onTaskDataReceived(data);
+  void _initForegroundTask() {
+    // ERROR FIXED: addTaskDataCallback hata kar naya method use kiya
+    FlutterForegroundTask.initReceivePort(_receivePort);
+    FlutterForegroundTask.receivePort?.listen((data) {
+      if (data is Map && data['type'] == 'play_video') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VideoPlayerScreen(
+              video: data['video'],
+              isUrl: data['isUrl'],
+            ),
+          ),
+        );
+      }
     });
-    FlutterForegroundTask.setTaskData(_receivePort!.sendPort);
-  }
-
-  void _onTaskDataReceived(dynamic data) {
-    if (data is Map && data['type'] == 'play_video') {
-      String video = data['video'];
-      bool isUrl = data['isUrl'];
-      // Navigate to video player screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => VideoPlayerScreen(video: video, isUrl: isUrl),
-        ),
-      );
-    }
   }
 
   @override
   void dispose() {
     _receivePort?.close();
-    FlutterForegroundTask.removeTaskDataCallback();
     super.dispose();
   }
 
@@ -280,9 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkServiceStatus() async {
     bool running = await FlutterForegroundTask.isRunningService;
-    setState(() {
-      _isServiceRunning = running;
-    });
+    setState(() => _isServiceRunning = running);
   }
 
   Future<void> _startService() async {
@@ -308,24 +229,13 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              _isServiceRunning
-                  ? 'Service is running\nWaiting for Telegram commands...'
-                  : 'Service is stopped',
-              textAlign: TextAlign.center,
+              _isServiceRunning ? 'Service Running' : 'Service Stopped',
               style: TextStyle(fontSize: 18),
             ),
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: _isServiceRunning ? _stopService : _startService,
               child: Text(_isServiceRunning ? 'Stop Service' : 'Start Service'),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Bot Commands:\n'
-              'Send: /url_video [URL] - to play video from URL\n'
-              'Send a video file - to play uploaded video',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14),
             ),
           ],
         ),
@@ -334,9 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ---------- Video Player Screen ----------
 class VideoPlayerScreen extends StatefulWidget {
-  final String video; // Can be URL or local file path
+  final String video;
   final bool isUrl;
 
   VideoPlayerScreen({required this.video, required this.isUrl});
@@ -352,21 +261,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeVideo();
-    // Keep screen on while video plays
     WakelockPlus.enable();
+    _initializeVideo();
   }
 
   Future<void> _initializeVideo() async {
     if (widget.isUrl) {
-      _controller = VideoPlayerController.network(widget.video);
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.video));
     } else {
       _controller = VideoPlayerController.file(File(widget.video));
     }
     await _controller.initialize();
-    setState(() {
-      _isInitialized = true;
-    });
+    setState(() => _isInitialized = true);
     _controller.play();
   }
 
@@ -382,25 +288,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     return Scaffold(
       appBar: AppBar(title: Text('Playing Video')),
       body: _isInitialized
-          ? Center(
-              child: AspectRatio(
-                aspectRatio: _controller.value.aspectRatio,
-                child: VideoPlayer(_controller),
-              ),
+          ? AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller),
             )
           : Center(child: CircularProgressIndicator()),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          setState(() {
-            _controller.value.isPlaying
-                ? _controller.pause()
-                : _controller.play();
-          });
-        },
-        child: Icon(
-          _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-        ),
-      ),
     );
   }
 }
