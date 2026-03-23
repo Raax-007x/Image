@@ -25,11 +25,9 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. MAGIC STEP: Generate fresh Android folder with V2 Embedding
       - name: ✨ Generate Fresh Android Project
         run: flutter create --platforms android .
 
-      # 2. Inject Foreground Service Permissions into AndroidManifest.xml
       - name: 💉 Auto-Inject Android Manifest
         run: |
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
@@ -42,6 +40,7 @@ jobs:
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
               <application
                   android:label="child_monitor"
@@ -80,12 +79,12 @@ jobs:
           </manifest>
           EOF
 
-      # 3. Inject MinSDK 24 and CompileSDK 34 into build.gradle
-      - name: 🛠️ Auto-Fix build.gradle versions
+      # ERROR FIXED: CompileSdk aur TargetSdk ko 36 kiya hai naye plugins ke liye
+      - name: 🛠️ Auto-Fix build.gradle versions to SDK 36
         run: |
           sed -i 's/flutter.minSdkVersion/24/g' android/app/build.gradle
-          sed -i 's/flutter.compileSdkVersion/34/g' android/app/build.gradle
-          sed -i 's/flutter.targetSdkVersion/34/g' android/app/build.gradle
+          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle
+          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle
 
       - name: 📦 Install Dependencies
         run: flutter pub get
