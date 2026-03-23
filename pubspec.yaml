@@ -9,11 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # UI & Networking
   http: ^1.2.0
   video_player: ^2.8.2
-  
-  # Background Service & System
   flutter_foreground_task: ^6.1.1
   path_provider: ^2.1.2
   permission_handler: ^11.3.0
