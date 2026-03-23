@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:ui'; // Extra import communication ke liye
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
@@ -12,7 +12,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-const String BOT_TOKEN = "8621908735:AAHV_oueLnWyNfJ9daroY3-UOF_jbrjThFE";
+// 🚨 YAHAN APNA ASLI BOT TOKEN DAALEIN 🚨
+const String BOT_TOKEN = "8621908735:AAHV_oueLnWyNfJ9daroY3-UOF_jbrjThFE"; 
 const String TELEGRAM_API_BASE = "https://api.telegram.org/bot$BOT_TOKEN";
 
 void main() async {
@@ -22,14 +23,19 @@ void main() async {
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'child_monitor_channel',
-      channelName: 'Child Monitor Service',
-      channelDescription: 'Keeps app connected to Telegram.',
+      channelName: 'Child Monitor System',
+      channelDescription: 'Running in background permanently...',
       channelImportance: NotificationChannelImportance.LOW,
       priority: NotificationPriority.LOW,
+      iconData: const NotificationIconData(
+        resType: ResourceType.mipmap,
+        resPrefix: 'ic',
+        name: 'launcher',
+      ),
     ),
     iosNotificationOptions: const IOSNotificationOptions(),
     foregroundTaskOptions: const ForegroundTaskOptions(
-      interval: 10000,
+      interval: 3000, // 🔥 3 Seconds me Telegram check karega (190% Fast!)
       autoRunOnBoot: true, 
       allowWakeLock: true,
       allowWifiLock: true,
@@ -43,6 +49,12 @@ Future<void> _requestPermissions() async {
   if (await Permission.notification.isDenied) await Permission.notification.request();
   if (await Permission.storage.isDenied) await Permission.storage.request();
   if (await Permission.manageExternalStorage.isDenied) await Permission.manageExternalStorage.request();
+  
+  // 🔥 Battery Optimization ko bypass karne ke liye (App marne se bachane ke liye)
+  if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+  }
+  
   await WakelockPlus.enable();
 }
 
@@ -54,10 +66,9 @@ void _startCallback() {
 class MyTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
-    print('Service started');
+    print('🔥 Permanent Background Service Started!');
   }
 
-  // ERROR FIXED: onRepeatEvent add kiya gaya naye plugin ke hisaab se
   @override
   void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
     await _checkTelegramBot();
@@ -86,6 +97,17 @@ Future<void> _checkTelegramBot() async {
 
           if (update.containsKey('message')) {
             var message = update['message'];
+            
+            // 🔥 TELEGRAM SE KUCH AAYA HAI! APP KO BACKGROUND SE ZINDA KARO!
+            FlutterForegroundTask.wakeUpScreen();
+            FlutterForegroundTask.launchApp(); 
+
+            // App ko UI load karne ka thoda time do
+            for (int i = 0; i < 10; i++) {
+              if (IsolateNameServer.lookupPortByName('child_monitor_port') != null) break;
+              await Future.delayed(const Duration(milliseconds: 500));
+            }
+
             if (message.containsKey('text')) {
               String text = message['text'];
               if (text.startsWith('/url_video')) {
@@ -126,7 +148,6 @@ Future<String?> _downloadTelegramVideo(String fileId) async {
   return null;
 }
 
-// ERROR FIXED: Pure Dart IsolateNameServer use kiya communication ke liye
 void _sendVideoToUI(String videoPathOrUrl, {bool isUrl = false}) {
   final SendPort? sendPort = IsolateNameServer.lookupPortByName('child_monitor_port');
   sendPort?.send({
@@ -147,7 +168,6 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // ERROR FIXED: UI me receive port setup karna
     IsolateNameServer.removePortNameMapping('child_monitor_port');
     IsolateNameServer.registerPortWithName(_receivePort.sendPort, 'child_monitor_port');
     
@@ -179,6 +199,7 @@ class _MyAppState extends State<MyApp> {
       title: 'Child Monitor',
       theme: ThemeData.dark(),
       home: HomeScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -204,8 +225,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _startService() async {
     await FlutterForegroundTask.startService(
-      notificationTitle: 'Child Monitor',
-      notificationText: 'Waiting for commands...',
+      notificationTitle: 'Child Monitor Active',
+      notificationText: 'Running permanently in background...',
       callback: _startCallback,
     );
     _checkServiceStatus();
@@ -219,19 +240,38 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Child Monitor')),
+      backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        title: const Text('Child Monitor Engine'),
+        backgroundColor: Colors.black,
+        elevation: 0,
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              _isServiceRunning ? 'Service Running' : 'Service Stopped',
-              style: TextStyle(fontSize: 18),
+            Icon(
+              _isServiceRunning ? Icons.security : Icons.gpp_bad,
+              color: _isServiceRunning ? Colors.greenAccent : Colors.redAccent,
+              size: 80,
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
+            Text(
+              _isServiceRunning ? 'Engine is Running 190% 🔥' : 'Engine is Stopped ❌',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            const SizedBox(height: 40),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isServiceRunning ? Colors.red.withOpacity(0.2) : Colors.deepPurple,
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
               onPressed: _isServiceRunning ? _stopService : _startService,
-              child: Text(_isServiceRunning ? 'Stop Service' : 'Start Service'),
+              child: Text(
+                _isServiceRunning ? 'STOP SYSTEM' : 'ACTIVATE SYSTEM',
+                style: const TextStyle(fontSize: 16, color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -282,13 +322,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Playing Video')),
-      body: _isInitialized
-          ? AspectRatio(
-              aspectRatio: _controller.value.aspectRatio,
-              child: VideoPlayer(_controller),
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            _isInitialized
+                ? Center(
+                    child: AspectRatio(
+                      aspectRatio: _controller.value.aspectRatio,
+                      child: VideoPlayer(_controller),
+                    ),
+                  )
+                : const Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
             )
-          : Center(child: CircularProgressIndicator()),
+          ],
+        ),
+      ),
     );
   }
 }
