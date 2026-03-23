@@ -1,0 +1,16 @@
+android {
+    namespace "com.example.child_monitor" // Apne project ka namespace check kar lena
+    compileSdkVersion 34 // Ise 34 par set karein
+
+    // ... baaki configuration ...
+
+    defaultConfig {
+        applicationId "com.example.child_monitor" 
+        minSdkVersion 24 // Video player aur foreground task ke liye kam se kam 24 chahiye
+        targetSdkVersion 34
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+    
+    // ...
+}
