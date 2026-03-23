@@ -12,7 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-const String BOT_TOKEN = "YOUR_BOT_TOKEN_HERE";
+const String BOT_TOKEN = "8621908735:AAHV_oueLnWyNfJ9daroY3-UOF_jbrjThFE";
 const String TELEGRAM_API_BASE = "https://api.telegram.org/bot$BOT_TOKEN";
 
 void main() async {
