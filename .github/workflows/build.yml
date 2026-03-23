@@ -1,42 +1,51 @@
-name: Build APK
+name: Build Flutter APK ✅
 
+# Ye action kab run hoga: Main branch pe push karne pe ya manually button dabane pe
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main", "master" ]
+  workflow_dispatch: # GitHub par "Run workflow" button enable karne ke liye
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # 1. Code ko GitHub se uthana
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
+      # 2. Android build ke liye Java setup karna (JDK 17 best hai SDK 34 ke liye)
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle' # Build fast karne ke liye cache
 
-      - name: Setup Flutter
+      # 3. Flutter SDK setup karna
+      - name: 🦋 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0' # Use latest stable
           channel: 'stable'
+          # Agar koi specific version chahiye toh yahan set kar sakte ho, 
+          # warna ye latest stable utha lega.
 
-      - name: Install dependencies
+      # 4. Pubspec dependencies install karna
+      - name: 📦 Install Dependencies
         run: flutter pub get
 
-      - name: Verify Flutter setup
-        run: flutter doctor
-
-      - name: Build APK
+      # 5. Release APK build karna
+      - name: 🛠️ Build APK
         run: flutter build apk --release
 
-      - name: Upload APK artifact
+      # 6. Build hone ke baad APK ko GitHub Artifacts me save karna taki aap download kar sako
+      - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: child-monitor-apk
+          name: Child-Monitor-Release-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14 # APK 14 dino tak download ke liye available rahega
