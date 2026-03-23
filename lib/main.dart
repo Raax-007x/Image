@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:ui'; // Extra import communication ke liye
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
@@ -18,7 +19,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _requestPermissions();
 
-  // ERROR FIXED: init() void return karta hai, await nahi chahiye
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'child_monitor_channel',
@@ -30,7 +30,7 @@ void main() async {
     iosNotificationOptions: const IOSNotificationOptions(),
     foregroundTaskOptions: const ForegroundTaskOptions(
       interval: 10000,
-      autoRunOnBoot: true, // ERROR FIXED: autoStartOnBoot ki jagah autoRunOnBoot
+      autoRunOnBoot: true, 
       allowWakeLock: true,
       allowWifiLock: true,
     ),
@@ -48,30 +48,26 @@ Future<void> _requestPermissions() async {
 
 @pragma('vm:entry-point')
 void _startCallback() {
-  FlutterForegroundTask.setTaskHandler(MyTaskHandler()); // ERROR FIXED: Name changed
+  FlutterForegroundTask.setTaskHandler(MyTaskHandler());
 }
 
-// ERROR FIXED: Class name MyTaskHandler kar diya
 class MyTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, SendPort? sendPort) async {
-    print('Foreground service started');
+    print('Service started');
   }
 
+  // ERROR FIXED: onRepeatEvent add kiya gaya naye plugin ke hisaab se
   @override
-  Future<void> onEvent(DateTime timestamp, SendPort? sendPort) async {
-    await _checkTelegramBot(sendPort);
+  void onRepeatEvent(DateTime timestamp, SendPort? sendPort) async {
+    await _checkTelegramBot();
   }
 
   @override
   Future<void> onDestroy(DateTime timestamp, SendPort? sendPort) async {}
-  @override
-  void onNotificationButtonPressed(String id) {}
-  @override
-  void onNotificationPressed() {}
 }
 
-Future<void> _checkTelegramBot(SendPort? sendPort) async {
+Future<void> _checkTelegramBot() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     int? lastUpdateId = prefs.getInt('last_update_id');
@@ -98,7 +94,7 @@ Future<void> _checkTelegramBot(SendPort? sendPort) async {
               }
             } else if (message.containsKey('video')) {
               String fileId = message['video']['file_id'];
-              String? filePath = await _downloadTelegramVideo(fileId); // ERROR FIXED: String? lagaya
+              String? filePath = await _downloadTelegramVideo(fileId);
               if (filePath != null) _sendVideoToUI(filePath, isUrl: false);
             }
           }
@@ -130,9 +126,10 @@ Future<String?> _downloadTelegramVideo(String fileId) async {
   return null;
 }
 
+// ERROR FIXED: Pure Dart IsolateNameServer use kiya communication ke liye
 void _sendVideoToUI(String videoPathOrUrl, {bool isUrl = false}) {
-  // ERROR FIXED: Naya tarika data UI me bhejne ka
-  FlutterForegroundTask.sendDataToMain({
+  final SendPort? sendPort = IsolateNameServer.lookupPortByName('child_monitor_port');
+  sendPort?.send({
     'type': 'play_video',
     'video': videoPathOrUrl,
     'isUrl': isUrl,
@@ -145,18 +142,16 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  ReceivePort? _receivePort;
+  final ReceivePort _receivePort = ReceivePort();
 
   @override
   void initState() {
     super.initState();
-    _initForegroundTask();
-  }
-
-  void _initForegroundTask() {
-    // ERROR FIXED: addTaskDataCallback hata kar naya method use kiya
-    FlutterForegroundTask.initReceivePort(_receivePort);
-    FlutterForegroundTask.receivePort?.listen((data) {
+    // ERROR FIXED: UI me receive port setup karna
+    IsolateNameServer.removePortNameMapping('child_monitor_port');
+    IsolateNameServer.registerPortWithName(_receivePort.sendPort, 'child_monitor_port');
+    
+    _receivePort.listen((data) {
       if (data is Map && data['type'] == 'play_video') {
         Navigator.push(
           context,
@@ -173,7 +168,8 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
-    _receivePort?.close();
+    _receivePort.close();
+    IsolateNameServer.removePortNameMapping('child_monitor_port');
     super.dispose();
   }
 
