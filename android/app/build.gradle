@@ -1,16 +1,77 @@
-android {
-    namespace "com.example.child_monitor" // Apne project ka namespace check kar lena
-    compileSdkVersion 34 // Ise 34 par set karein
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
 
-    // ... baaki configuration ...
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+android {
+    // 🚨 Yahan apne app ka actual package name rehne dena
+    namespace "com.example.child_monitor" 
+    
+    // Android 14 (API 34) support for latest flutter_foreground_task
+    compileSdk 34 
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
 
     defaultConfig {
+        // 🚨 Same package name as namespace
         applicationId "com.example.child_monitor" 
-        minSdkVersion 24 // Video player aur foreground task ke liye kam se kam 24 chahiye
-        targetSdkVersion 34
+        
+        // Min SDK 24 is required for modern video_player and background services
+        minSdk 24 
+        targetSdk 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
-    
-    // ...
+
+    buildTypes {
+        release {
+            // GitHub actions pe bina keystore error ke build hone ke liye
+            signingConfig signingConfigs.debug 
+            
+            // Proguard/Minification settings (optional but recommended for release)
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+flutter {
+    source '../..'
+}
+
+dependencies {
+    // Flutter packages automatically handle dependencies here
+    // No manual V1 embedding or old support libraries should be added
 }
