@@ -79,12 +79,13 @@ jobs:
           </manifest>
           EOF
 
-      # ERROR FIXED: CompileSdk aur TargetSdk ko 36 kiya hai naye plugins ke liye
-      - name: 🛠️ Auto-Fix build.gradle versions to SDK 36
+      # ERROR FIXED: Naye .kts file mein SDK 36 inject kiya gaya
+      - name: 🛠️ Auto-Fix build.gradle.kts versions to SDK 36
         run: |
-          sed -i 's/flutter.minSdkVersion/24/g' android/app/build.gradle
-          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle
-          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle
+          rm -f android/app/build.gradle
+          sed -i 's/flutter.minSdkVersion/24/g' android/app/build.gradle.kts || true
+          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle.kts || true
+          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle.kts || true
 
       - name: 📦 Install Dependencies
         run: flutter pub get
